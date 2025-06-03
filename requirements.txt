@@ -5,4 +5,4 @@ language-tool-python
 spacy
 huggingface-hub
 py -3.11 -m pip freeze
-
+pip install accelerate

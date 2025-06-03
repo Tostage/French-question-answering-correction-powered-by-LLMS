@@ -1,81 +1,71 @@
-import os
-os.environ["TORCH_ALLOW_TF32_CUDA"] = "0"
-
 import streamlit as st
+from qa_model import load_french_llm, generate_answer
 import pandas as pd
-import json
-import random
-from corrector import correct_french, load_mistakes
-from qa_model import load_french_llm, answer_question, load_sample_questions
+import os
+from datetime import datetime
 
-st.set_page_config(page_title="FrançaisQA", page_icon="🇫🇷")
-st.title("🇫🇷 FrançaisQA — Correction + Réponses + Export CSV")
+st.set_page_config(page_title="French QA Correction App", layout="wide")
 
 if "pipe" not in st.session_state:
     st.session_state.pipe = load_french_llm()
 
-if "log" not in st.session_state:
-    st.session_state.log = []
+st.title("🇫🇷 French Question Answering & Correction App")
+st.markdown("Evaluate LLM answers, correct them, and export as CSV.")
 
-questions = load_sample_questions()
-mistakes = load_mistakes()
+# Load sample questions
+def load_questions():
+    if os.path.exists("sample_questions.txt"):
+        with open("sample_questions.txt", "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+    return []
 
-tab1, tab2, tab3 = st.tabs(["📝 Correction", "❓ Q&A", "📤 Export"])
+sample_questions = load_questions()
 
-# ----- Correction tab -----
-with tab1:
-    st.subheader("Correction grammaticale")
+# Session Data
+if "output_rows" not in st.session_state:
+    st.session_state.output_rows = []
 
-    if st.button("🔁 Exemple d’erreur"):
-        ex = random.choice(mistakes)
-        st.session_state.input_text = ex["input"]
-        st.session_state.expected = ex["expected"]
-        st.experimental_rerun()
+# Sidebar
+st.sidebar.header("Options")
+selected_question = st.sidebar.selectbox("Choose a sample question", [""] + sample_questions)
+custom_question = st.sidebar.text_input("Or enter your own:", "")
 
-    text_input = st.text_area("Texte à corriger :", value=st.session_state.get("input_text", ""))
-    
-    if st.button("Corriger"):
-        corrected, explanations = correct_french(text_input)
-        st.success(f"✅ Correction : {corrected}")
-        for exp in explanations:
-            st.markdown(f"- **Erreur**: `{exp['error']}` → {exp['message']}")
-            if exp["suggestions"]:
-                st.markdown(f"  - **Suggestions**: {', '.join(exp['suggestions'])}")
-        if "expected" in st.session_state:
-            st.info(f"🎯 Correction attendue : {st.session_state.expected}")
-        st.session_state.log.append({
-            "type": "correction",
-            "input": text_input,
-            "output": corrected
-        })
+# Main interaction
+question = custom_question if custom_question.strip() else selected_question
 
-# ----- QA tab -----
-with tab2:
-    st.subheader("Question en français")
+if question:
+    st.subheader("📌 Question")
+    st.write(question)
 
-    if st.button("🎲 Question aléatoire"):
-        st.session_state.question = random.choice(questions)
-        st.experimental_rerun()
+    if st.button("Generate Answer"):
+        with st.spinner("Generating..."):
+            llm_response = generate_answer(st.session_state.pipe, question)
+            st.session_state.last_response = llm_response
 
-    user_q = st.text_input("Posez votre question :", value=st.session_state.get("question", ""))
-    
-    if st.button("Répondre"):
-        with st.spinner("Génération..."):
-            answer = answer_question(st.session_state.pipe, user_q)
-        st.success(f"💬 Réponse : {answer}")
-        st.session_state.log.append({
-            "type": "question",
-            "input": user_q,
-            "output": answer
-        })
+if "last_response" in st.session_state:
+    st.subheader("🤖 LLM Response")
+    st.write(st.session_state.last_response)
 
-# ----- Export tab -----
-with tab3:
-    st.subheader("Exporter les résultats")
-    if st.session_state.log:
-        df = pd.DataFrame(st.session_state.log)
-        st.dataframe(df)
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Télécharger CSV", data=csv, file_name="corrections_log.csv", mime="text/csv")
-    else:
-        st.info("Aucun résultat à exporter.")
+    st.subheader("🛠 Manual Correction")
+    correction = st.text_area("Enter your correction (if any):", "")
+    mistake_flag = st.checkbox("Flag as mistake?", value=False)
+
+    if st.button("Save Response"):
+        entry = {
+            "question": question,
+            "llm_response": st.session_state.last_response,
+            "correction": correction,
+            "mistake_flag": "yes" if mistake_flag else "no",
+            "timestamp": datetime.now().isoformat()
+        }
+        st.session_state.output_rows.append(entry)
+        st.success("Saved!")
+
+if st.session_state.output_rows:
+    st.subheader("📤 Export Responses")
+    df = pd.DataFrame(st.session_state.output_rows)
+    st.dataframe(df)
+
+    if st.button("Export to CSV"):
+        df.to_csv("outputs.csv", index=False, encoding="utf-8")
+        st.success("Exported to outputs.csv ✅")

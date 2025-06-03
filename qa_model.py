@@ -4,7 +4,7 @@ def load_french_llm():
     model_id = "HuggingFaceH4/zephyr-7b-beta"
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id)  # ✅ No device_map, no torch_dtype
 
     pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
     return pipe

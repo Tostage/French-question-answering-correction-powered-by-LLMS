@@ -1,6 +1,6 @@
 import language_tool_python
 
-tool = language_tool_python.LanguageTool('fr')  # French mode
+tool = language_tool_python.LanguageTool('fr')
 
 def correct_french(text):
     matches = tool.check(text)
@@ -15,4 +15,3 @@ def correct_french(text):
         })
 
     return corrected, explanations
-

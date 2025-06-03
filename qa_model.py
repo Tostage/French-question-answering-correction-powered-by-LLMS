@@ -1,15 +1,13 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-
+import torch
 
 def load_french_llm():
-    model_id = "HuggingFaceH4/zephyr-7b-beta"
+    model_id = "HuggingFaceH4/zephyr-7b-beta"  # Change if needed to smaller model like 'google/flan-t5-base'
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id)
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=128)
     return pipe
 
-
-def answer_question(pipe, question):
-    prompt = f"Corrige la réponse à cette question en français : {question}"
-    response = pipe(prompt, max_new_tokens=200, do_sample=True)[0]["generated_text"]
-    return response.replace(prompt, "").strip()
+def generate_answer(pipe, question):
+    result = pipe(question)
+    return result[0]['generated_text'].split("\n")[0]
